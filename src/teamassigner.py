@@ -51,7 +51,7 @@ class TeamAssigner:
             player_color = self.get_player_color(frame,bbox)
             playr_colors.append(player_color)
 
-        kmeans = KMeans(n_clusters=2, init="k-means++", n_init=1)
+        kmeans = KMeans(n_clusters=2, init="k-means++", n_init=10)
         kmeans.fit(playr_colors)
 
         self.kmeans = kmeans

@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import cv2
 sys.path.append('../')
-from utils import get_bbox_centre, get_bbox_width_height
+from utils import get_bbox_centre, get_bbox_width_height, foot_position
 
 
 
@@ -81,6 +81,17 @@ class Tracker:
             
         return tracks
     
+    def add_position_to_tracks(self, tracks):
+        for object, object_tracks in tracks.items():
+            for frame_no, track in enumerate(object_tracks):
+                for track_id, track_info in track.items():
+                    bbox = track_info['bbox']
+                    if object == 'ball':
+                        position = get_bbox_centre(bbox)
+                    else:
+                        position = foot_position(bbox)
+                    tracks[object][frame_no][track_id]['position'] = position
+    
     def interpolate_ball_tracks(self, ball_positions):
 
         ball_positions = [x.get(1,{}).get('bbox',[]) for x in ball_positions]
@@ -107,8 +118,26 @@ class Tracker:
         cv2.drawContours(frames, [traingle], 0, (255,255,255), 2)
         return frames
 
+    def draw_team_ball_control(self, frame, frame_no, team_ball_control):
 
-    
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (930, 45), (1170, 105), (0,0,0), cv2.FILLED)
+
+        alpha = 0.4
+        cv2.addWeighted(overlay, alpha, frame, 1-alpha, 0, frame)
+        
+        team_ball_control_now = team_ball_control[:frame_no+1]
+
+        team_1_frames = team_ball_control_now[team_ball_control_now ==1].shape[0]
+        team_2_frames = team_ball_control_now[team_ball_control_now ==2].shape[0]
+
+        team1 = team_1_frames/(team_1_frames+team_2_frames)
+        team2 = team_2_frames/(team_1_frames+team_2_frames)
+
+        cv2.putText(frame, f"Team 1 posession: {team1*100:.2f}", (940, 68), cv2.FONT_HERSHEY_PLAIN, 1, (200, 200, 200), 2)
+        cv2.putText(frame, f"Team 2 posession: {team2*100:.2f}", (940, 90), cv2.FONT_HERSHEY_PLAIN, 1, (200,200,200), 2)
+
+        return frame    
 
     def draw_ellipse(self, frames, bbox, color, track_id = None):
         x_centre, y_centre = get_bbox_centre(bbox)
@@ -146,7 +175,7 @@ class Tracker:
 
         return frames
     
-    def plot_annotations(self, frames,tracks):
+    def plot_annotations(self, frames,tracks, team_ball_contol):
         out_frames = []
         for frame_id, frame in enumerate(frames):
             copy = frame.copy()
@@ -159,10 +188,16 @@ class Tracker:
                 color = player.get("team_color", (255,255,255))
                 self.draw_ellipse(frame, player["bbox"], color, track_id=track_id)
 
+                if player.get('has_ball',False):
+                    frame = self.draw_triangle(frame,player["bbox"], (0,0, 255))
+
             for track_id, referee in referee_dictionary.items():
                 self.draw_ellipse(frame, referee['bbox'], (0, 255, 255))
             
             for track_id, ball in ball_dictionary.items():
                 self.draw_triangle(frame, ball['bbox'], (0,255,0))
+
+            #team ball control
+            frame = self.draw_team_ball_control(frame, frame_id, team_ball_contol)
             out_frames.append(frame)
         return out_frames
